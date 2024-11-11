@@ -1,0 +1,4 @@
+streamlit==1.40.0
+openai==1.52.0
+pinecone==5.3.1
+pymongo==4.10.1
