@@ -130,53 +130,51 @@ def main():
     # Initialize session state
     initialize_session_state()
     
-    # Initialize user_input in session state if it doesn't exist
-    if "user_input" not in st.session_state:
-        st.session_state.user_input = ""
-    
     # Initialize Pinecone
     pc = Pinecone(api_key=st.secrets["pinecone"]["api_key"])
     index = pc.Index("mediation4")
     api_manager = APIManager(index)
+
+    # Create a container for the main content
+    main_container = st.container()
     
-    # Display the AI response and input field dynamically in the same container
-    with st.container():
-        # Display the current AI response
+    # Create a container for the chat input with custom height
+    input_container = st.container()
+    
+    # Use the main container for the response
+    with main_container:
         st.write(st.session_state.current_response)
         
-        # User input field with current session state value
-        user_input = st.text_input(
-            "Your response:", 
-            key="user_input",
-            value=st.session_state.user_input
+        # Add some spacing
+        st.markdown("<br>" * 2, unsafe_allow_html=True)
+    
+    # Use the input container for the chat input
+    with input_container:
+        user_input = st.chat_input("Your response:")
+    
+    if user_input:
+        # Add user message to conversation history
+        st.session_state.messages.append({"role": "user", "content": user_input})
+        # Query Pinecone and add to backend context
+        relevant_info = api_manager.query_pinecone(user_input)
+        if relevant_info:
+            st.session_state.backend_messages.append({
+                "role": "system", 
+                "content": f"Consider this relevant information when responding:\n{relevant_info}"
+            })
+        # Combine messages for API call
+        full_context = (
+            [st.session_state.messages[0]]  # System message
+            + st.session_state.backend_messages  # Backend context
+            + st.session_state.messages[1:]  # Conversation history
         )
+        # Generate response and update current_response
+        response = api_manager.generate_response(full_context)
+        st.session_state.current_response = response
+        st.session_state.messages.append({"role": "assistant", "content": response})
         
-        # Check if user input is provided
-        if user_input:
-            # Process the input
-            st.session_state.messages.append({"role": "user", "content": user_input})
-            # Query Pinecone and add to backend context
-            relevant_info = api_manager.query_pinecone(user_input)
-            if relevant_info:
-                st.session_state.backend_messages.append({
-                    "role": "system", 
-                    "content": f"Consider this relevant information when responding:\n{relevant_info}"
-                })
-            # Combine messages for API call
-            full_context = (
-                [st.session_state.messages[0]]  # System message
-                + st.session_state.backend_messages  # Backend context
-                + st.session_state.messages[1:]  # Conversation history
-            )
-            # Generate response
-            response = api_manager.generate_response(full_context)
-            st.session_state.current_response = response
-            st.session_state.messages.append({"role": "assistant", "content": response})
-            
-            # Clear the input by setting session state
-            st.session_state.user_input = ""
-            # Rerun the app to refresh the input field
-            st.rerun()
+        # Force a rerun to update the display
+        st.rerun()
 
 if __name__ == "__main__":
     main()
