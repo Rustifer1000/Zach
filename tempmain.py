@@ -172,7 +172,7 @@ def main():
             st.session_state["user_input"] = ""
 
             # Rerun the app to update the UI
-            st.experimental_rerun()
+            st.rerun()
 
 if __name__ == "__main__":
     main()
