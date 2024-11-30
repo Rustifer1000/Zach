@@ -140,18 +140,16 @@ def main():
         # Display the current AI response
         st.write(st.session_state.current_response)
 
-        # User input field
+        # Use a temporary variable to capture user input
         user_input = st.text_input(
-            "Your response:", 
-            value=st.session_state.get("input_value", ""),  # Default value
+            "Your response:",
             key="user_input"
         )
 
-        # Process user input only when the user submits (i.e., non-empty and new input)
-        if user_input and user_input != st.session_state.get("last_input"):
+        # Process the input if provided
+        if user_input and "processed" not in st.session_state:
             # Process the input
             st.session_state.messages.append({"role": "user", "content": user_input})
-            st.session_state["last_input"] = user_input  # Track the last processed input
 
             # Query Pinecone and add to backend context
             relevant_info = api_manager.query_pinecone(user_input)
@@ -173,8 +171,16 @@ def main():
             st.session_state.current_response = response
             st.session_state.messages.append({"role": "assistant", "content": response})
             
-            # Clear the input by setting a temporary variable
-            st.session_state["input_value"] = ""  # This prevents modifying `user_input` directly
+            # Mark as processed and set a rerun flag
+            st.session_state["processed"] = True
+            st.session_state["rerun_flag"] = True
+
+    # Trigger a rerun if necessary
+    if st.session_state.get("rerun_flag", False):
+        # Clear rerun flag and input field
+        st.session_state["rerun_flag"] = False
+        st.session_state["user_input"] = ""  # Clear input field
+        st.rerun()  # Use rerun for immediate UI update
 
 if __name__ == "__main__":
     main()
