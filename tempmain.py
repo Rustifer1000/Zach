@@ -140,7 +140,7 @@ def main():
         # Display the current AI response
         st.write(st.session_state.current_response)
 
-        # User input field
+        # Temporary variable to capture user input
         user_input = st.text_input("Your response:", key="user_input")
 
         # Check if user input is provided
@@ -168,11 +168,11 @@ def main():
             st.session_state.current_response = response
             st.session_state.messages.append({"role": "assistant", "content": response})
             
-            # Clear the input field
+            # Clear the input field indirectly by resetting the session state
             st.session_state["user_input"] = ""
 
-            # **Do not rerun unnecessarily**.
-            # Refresh display by setting session state values only.
+            # Rerun the app to update the UI
+            st.experimental_rerun()
 
 if __name__ == "__main__":
     main()
