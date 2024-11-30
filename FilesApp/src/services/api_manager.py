@@ -10,45 +10,84 @@ class APIManager:
     def query_context(self, 
                      user_input: str, 
                      conversation_history: List[Dict]) -> str:
-        # Get recent conversation context
-        context_window = self._get_context_window(conversation_history)
+        """Get relevant context based on user input and conversation history"""
         
-        # Query vector store with both current input and context
+        # Extract conversation context
+        context = self._analyze_conversation_context(conversation_history)
+        
+        # Query vector store with context
         relevant_info = self.vector_store.query(
             text=user_input,
-            context_window=context_window
+            conversation_context=context
         )
         
         return self._format_context(relevant_info)
 
-    def generate_response(self, messages: List[Dict]) -> str:
-        try:
-            response = self.client.chat.completions.create(
-                model="gpt-4o",
-                messages=messages,
-                temperature=0.7
-            )
-            
-            return response.choices[0].message.content
+    def _analyze_conversation_context(self, conversation_history: List[Dict]) -> Dict:
+        """Analyze conversation to determine context and phase"""
+        if not conversation_history:
+            return {'mediation_phase': 'Initial_Contact'}
 
-        except Exception as e:
-            print(f"Error in generate_response: {str(e)}")
-            return "I apologize, but I encountered an error processing your request."
+        # Get recent messages
+        recent_messages = conversation_history[-3:]
+        
+        context = {
+            'mediation_phase': self._determine_phase(recent_messages),
+            'emotion_sensitive': self._check_emotional_content(recent_messages),
+            'needs_calculation': self._check_calculation_needed(recent_messages)
+        }
 
-    def _get_context_window(self, conversation_history: List[Dict], window_size: int = 3) -> str:
-        recent_messages = conversation_history[-window_size:]
-        return " ".join([msg["content"] for msg in recent_messages])
+        # Extract topic if present
+        topic = self._extract_topic(recent_messages)
+        if topic:
+            context['topic_domain'] = topic
+
+        return context
+
+    def _determine_phase(self, messages: List[Dict]) -> str:
+        # Add logic to determine current mediation phase
+        # This is a simplified example
+        return 'Initial_Contact' if len(messages) < 3 else 'Issue_Identification'
+
+    def _check_emotional_content(self, messages: List[Dict]) -> bool:
+        # Check if recent messages indicate emotional content
+        emotional_keywords = ['feel', 'upset', 'angry', 'worried', 'concerned']
+        return any(any(keyword in msg['content'].lower() for keyword in emotional_keywords) 
+                  for msg in messages)
+
+    def _check_calculation_needed(self, messages: List[Dict]) -> bool:
+        # Check if calculations might be needed
+        calculation_keywords = ['calculate', 'amount', 'payment', 'support', 'assets']
+        return any(any(keyword in msg['content'].lower() for keyword in calculation_keywords) 
+                  for msg in messages)
+
+    def _extract_topic(self, messages: List[Dict]) -> Optional[str]:
+        # Extract main topic from recent messages
+        # Add logic to map conversation content to topic domains
+        return None  # Placeholder
 
     def _format_context(self, relevant_info: Dict) -> str:
+        """Format the retrieved information for the LLM context"""
         formatted_sections = []
         
         if relevant_info['high_priority']:
-            formatted_sections.append("HIGH PRIORITY INFORMATION:")
-            formatted_sections.extend(relevant_info['high_priority'])
-            
-        for category, items in relevant_info.items():
-            if category != 'high_priority' and items:
-                formatted_sections.append(f"\n{category.upper()}:")
-                formatted_sections.extend(items)
-                
+            formatted_sections.append("HIGH PRIORITY GUIDANCE:")
+            for item in relevant_info['high_priority']:
+                formatted_sections.append(f"- {item['content']}")
+
+        if relevant_info['phase_specific']:
+            formatted_sections.append("\nPHASE-SPECIFIC GUIDANCE:")
+            for item in relevant_info['phase_specific']:
+                formatted_sections.append(f"- {item['content']}")
+
+        if relevant_info['emotional_support']:
+            formatted_sections.append("\nEMOTIONAL SUPPORT GUIDANCE:")
+            for item in relevant_info['emotional_support']:
+                formatted_sections.append(f"- {item['content']}")
+
+        if relevant_info['technical_info']:
+            formatted_sections.append("\nTECHNICAL INFORMATION:")
+            for item in relevant_info['technical_info']:
+                formatted_sections.append(f"- {item['content']}")
+
         return "\n".join(formatted_sections)
