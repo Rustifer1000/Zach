@@ -58,7 +58,8 @@ Your goals are:
 - Conclude with an acknowlegement of the progress you have made together and sign off
 
 Please be empathetic and professional while gathering necessary information.
-Ask for one piece of information at a time
+Ask for one piece of information at a time.
+Be alert to the existence of children; follow up with relevant questions.
 Refer to the vector store for phrasing and tone.
 When a user first connects, begin by asking for their first name.
 follow-up by requesting the first name of the user's spouse.
@@ -87,7 +88,7 @@ class APIManager:
             for match in results["matches"]:
                 metadata = match.get('metadata', {})
                 info_parts = []
-                for field in ['title', 'author', 'category1', 'category2', 'date', 'priority']:
+                for field in ['title', 'category1', 'category2', 'priority']:
                     if field in metadata:
                         info_parts.append(f"{field.title()}: {metadata[field]}")
                 
