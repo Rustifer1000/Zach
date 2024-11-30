@@ -140,13 +140,18 @@ def main():
         # Display the current AI response
         st.write(st.session_state.current_response)
 
-        # Temporary variable to capture user input
-        user_input = st.text_input("Your response:", key="user_input")
+        # User input field
+        user_input = st.text_input(
+            "Your response:", 
+            value=st.session_state.get("input_value", ""),  # Default value
+            key="user_input"
+        )
 
-        # Check if user input is provided
-        if user_input:
+        # Process user input only when the user submits (i.e., non-empty and new input)
+        if user_input and user_input != st.session_state.get("last_input"):
             # Process the input
             st.session_state.messages.append({"role": "user", "content": user_input})
+            st.session_state["last_input"] = user_input  # Track the last processed input
 
             # Query Pinecone and add to backend context
             relevant_info = api_manager.query_pinecone(user_input)
@@ -168,11 +173,8 @@ def main():
             st.session_state.current_response = response
             st.session_state.messages.append({"role": "assistant", "content": response})
             
-            # Clear the input field indirectly by resetting the session state
-            st.session_state["user_input"] = ""
-
-            # Rerun the app to update the UI
-            st.rerun()
+            # Clear the input by setting a temporary variable
+            st.session_state["input_value"] = ""  # This prevents modifying `user_input` directly
 
 if __name__ == "__main__":
     main()
