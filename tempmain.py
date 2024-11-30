@@ -130,27 +130,31 @@ def main():
     # Initialize session state
     initialize_session_state()
     
+    # Initialize user_input in session state if it doesn't exist
+    if "user_input" not in st.session_state:
+        st.session_state.user_input = ""
+    
     # Initialize Pinecone
     pc = Pinecone(api_key=st.secrets["pinecone"]["api_key"])
     index = pc.Index("mediation4")
     api_manager = APIManager(index)
-
+    
     # Display the AI response and input field dynamically in the same container
     with st.container():
         # Display the current AI response
         st.write(st.session_state.current_response)
-
-        # Use a temporary variable to capture user input
+        
+        # User input field with current session state value
         user_input = st.text_input(
-            "Your response:",
-            key="user_input"
+            "Your response:", 
+            key="user_input",
+            value=st.session_state.user_input
         )
-
-        # Process the input if provided
-        if user_input and "processed" not in st.session_state:
+        
+        # Check if user input is provided
+        if user_input:
             # Process the input
             st.session_state.messages.append({"role": "user", "content": user_input})
-
             # Query Pinecone and add to backend context
             relevant_info = api_manager.query_pinecone(user_input)
             if relevant_info:
@@ -158,29 +162,21 @@ def main():
                     "role": "system", 
                     "content": f"Consider this relevant information when responding:\n{relevant_info}"
                 })
-
             # Combine messages for API call
             full_context = (
                 [st.session_state.messages[0]]  # System message
                 + st.session_state.backend_messages  # Backend context
                 + st.session_state.messages[1:]  # Conversation history
             )
-
             # Generate response
             response = api_manager.generate_response(full_context)
             st.session_state.current_response = response
             st.session_state.messages.append({"role": "assistant", "content": response})
             
-            # Mark as processed and set a rerun flag
-            st.session_state["processed"] = True
-            st.session_state["rerun_flag"] = True
-
-    # Trigger a rerun if necessary
-    if st.session_state.get("rerun_flag", False):
-        # Clear rerun flag and input field
-        st.session_state["rerun_flag"] = False
-        st.session_state["user_input"] = ""  # Clear input field
-        st.rerun()  # Use rerun for immediate UI update
+            # Clear the input by setting session state
+            st.session_state.user_input = ""
+            # Rerun the app to refresh the input field
+            st.rerun()
 
 if __name__ == "__main__":
     main()
