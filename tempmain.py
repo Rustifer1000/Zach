@@ -125,10 +125,14 @@ def initialize_session_state():
         st.session_state.current_response = INITIAL_GREETING  # New: store current response
 
 def main():
-    st.title("Collins Family Mediation Assistant")
+    st.title("Collins Family Mediation AI Intermediary")
     
     # Initialize session state
     initialize_session_state()
+    
+    # Initialize user_input in session state if it doesn't exist
+    if "user_input" not in st.session_state:
+        st.session_state.user_input = ""
     
     # Initialize Pinecone
     pc = Pinecone(api_key=st.secrets["pinecone"]["api_key"])
@@ -140,12 +144,15 @@ def main():
         # Display the current AI response
         st.write(st.session_state.current_response)
         
-        # Create a form for user input
-        with st.form(key='input_form'):
-            user_input = st.text_input("Your response:", key="user_input")
-            submit_button = st.form_submit_button(label='Submit')
-            
-        if submit_button and user_input:
+        # User input field with current session state value
+        user_input = st.text_input(
+            "Your response:", 
+            key="user_input",
+            value=st.session_state.user_input
+        )
+        
+        # Check if user input is provided
+        if user_input:
             # Process the input
             st.session_state.messages.append({"role": "user", "content": user_input})
             # Query Pinecone and add to backend context
@@ -165,6 +172,11 @@ def main():
             response = api_manager.generate_response(full_context)
             st.session_state.current_response = response
             st.session_state.messages.append({"role": "assistant", "content": response})
+            
+            # Clear the input by setting session state
+            st.session_state.user_input = ""
+            # Rerun the app to refresh the input field
+            st.rerun()
 
 if __name__ == "__main__":
     main()
