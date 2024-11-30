@@ -135,43 +135,38 @@ def main():
     index = pc.Index("mediation4")
     api_manager = APIManager(index)
 
-    # Display the AI response and input field dynamically in the same container
-    with st.container():
-        # Display the current AI response
-        st.write(st.session_state.current_response)
+    # Only display the current response
+    st.write(st.session_state.current_response)
 
-        # User input field
-        user_input = st.text_input("Your response:", key="user_input")
+    # Handle user input
+    user_input = st.chat_input("Your response:")
+    
+    if user_input:
+        # Add user message to conversation history (but don't display)
+        st.session_state.messages.append({"role": "user", "content": user_input})
 
-        if user_input:
-            # Add user message to conversation history (but don't display)
-            st.session_state.messages.append({"role": "user", "content": user_input})
+        # Query Pinecone and add to backend context
+        relevant_info = api_manager.query_pinecone(user_input)
+        if relevant_info:
+            st.session_state.backend_messages.append({
+                "role": "system", 
+                "content": f"Consider this relevant information when responding:\n{relevant_info}"
+            })
 
-            # Query Pinecone and add to backend context
-            relevant_info = api_manager.query_pinecone(user_input)
-            if relevant_info:
-                st.session_state.backend_messages.append({
-                    "role": "system", 
-                    "content": f"Consider this relevant information when responding:\n{relevant_info}"
-                })
+        # Combine messages for API call
+        full_context = (
+            [st.session_state.messages[0]]  # System message
+            + st.session_state.backend_messages  # Backend context
+            + st.session_state.messages[1:]  # Conversation history
+        )
 
-            # Combine messages for API call
-            full_context = (
-                [st.session_state.messages[0]]  # System message
-                + st.session_state.backend_messages  # Backend context
-                + st.session_state.messages[1:]  # Conversation history
-            )
-
-            # Generate response and update current_response
-            response = api_manager.generate_response(full_context)
-            st.session_state.current_response = response
-            st.session_state.messages.append({"role": "assistant", "content": response})
-            
-            # Clear the input field
-            st.session_state["user_input"] = ""
-            
-            # Force a rerun to update the display
-            st.rerun()
+        # Generate response and update current_response
+        response = api_manager.generate_response(full_context)
+        st.session_state.current_response = response
+        st.session_state.messages.append({"role": "assistant", "content": response})
+        
+        # Force a rerun to update the display
+        st.rerun()
 
 if __name__ == "__main__":
     main()
