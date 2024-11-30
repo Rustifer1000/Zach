@@ -9,8 +9,8 @@ class VectorStore:
         self.similarity_threshold = 0.7
 
     def query(self, 
-              text: str, 
-              context_window: Optional[str] = None,
+              text: str,
+              conversation_context: Optional[Dict] = None,
               top_k: int = 5) -> Dict:
         try:
             # Generate embedding for current input
@@ -20,22 +20,16 @@ class VectorStore:
             )
             embedding = response.data[0].embedding
 
-            # If context window provided, also get its embedding
-            if context_window:
-                context_response = self.client.embeddings.create(
-                    model="text-embedding-3-large",
-                    input=context_window
-                )
-                context_embedding = context_response.data[0].embedding
-                
-                # Query both current input and context
-                results = self._query_with_context(embedding, context_embedding, top_k)
-            else:
-                results = self.pinecone_index.query(
-                    vector=embedding,
-                    top_k=top_k,
-                    include_metadata=True
-                )
+            # Build filter based on conversation context
+            filter_dict = self._build_filter(conversation_context) if conversation_context else {}
+
+            # Query Pinecone with filter
+            results = self.pinecone_index.query(
+                vector=embedding,
+                top_k=top_k,
+                include_metadata=True,
+                filter=filter_dict
+            )
 
             return self._process_results(results)
 
@@ -43,38 +37,33 @@ class VectorStore:
             print(f"Error in vector store query: {str(e)}")
             return {}
 
-    def _query_with_context(self, 
-                          current_embedding: List[float], 
-                          context_embedding: List[float],
-                          top_k: int) -> Dict:
-        # Query with both embeddings and combine results
-        current_results = self.pinecone_index.query(
-            vector=current_embedding,
-            top_k=top_k,
-            include_metadata=True
-        )
+    def _build_filter(self, context: Dict) -> Dict:
+        """Build Pinecone filter based on conversation context"""
+        filter_dict = {}
         
-        context_results = self.pinecone_index.query(
-            vector=context_embedding,
-            top_k=top_k,
-            include_metadata=True
-        )
+        if context.get('mediation_phase'):
+            filter_dict['mediation_phase'] = {'$eq': context['mediation_phase']}
         
-        # Combine and deduplicate results
-        return self._merge_results(current_results, context_results)
-
-    def _merge_results(self, current_results: Dict, context_results: Dict) -> Dict:
-        # Implement logic to merge and deduplicate results
-        # Prioritize based on both similarity and metadata
-        # Note: This is a placeholder - implementation needed
-        return current_results
+        if context.get('topic_domain'):
+            filter_dict['topic_domain'] = {'$eq': context['topic_domain']}
+        
+        # Add emotional context filtering
+        if context.get('emotion_sensitive'):
+            filter_dict['context_flags.emotion_sensitive'] = {'$eq': True}
+        
+        # Handle specific content needs
+        if context.get('needs_calculation'):
+            filter_dict['content_type'] = {'$eq': 'Calculation_Guide'}
+        
+        return filter_dict
 
     def _process_results(self, results: Dict) -> Dict:
         processed_info = {
-            'question_strategies': [],
-            'mediation_topics': [],
+            'high_priority': [],
+            'phase_specific': [],
+            'topic_specific': [],
             'emotional_support': [],
-            'high_priority': []
+            'technical_info': []
         }
         
         for match in results["matches"]:
@@ -82,14 +71,42 @@ class VectorStore:
                 continue
                 
             metadata = match.get('metadata', {})
-            content = metadata.get('content', '')
-            category = metadata.get('category1', '')
-            priority = metadata.get('priority', 'normal')
+            content = metadata.get('chunk_text', '')
             
-            if priority == 'high':
-                processed_info['high_priority'].append(content)
-                
-            if category in processed_info:
-                processed_info[category].append(content)
+            # Organize by interaction style and priority
+            if metadata.get('priority') == 'High':
+                processed_info['high_priority'].append({
+                    'content': content,
+                    'style': metadata.get('interaction_style'),
+                    'phase': metadata.get('mediation_phase')
+                })
+            
+            # Phase-specific information
+            if metadata.get('mediation_phase'):
+                processed_info['phase_specific'].append({
+                    'content': content,
+                    'phase': metadata.get('mediation_phase')
+                })
+
+            # Topic-specific information
+            if metadata.get('topic_domain'):
+                processed_info['topic_specific'].append({
+                    'content': content,
+                    'domain': metadata.get('topic_domain')
+                })
+
+            # Emotional support content
+            if metadata.get('context_flags', {}).get('emotion_sensitive'):
+                processed_info['emotional_support'].append({
+                    'content': content,
+                    'style': metadata.get('interaction_style')
+                })
+
+            # Technical information
+            if metadata.get('interaction_style') == 'Technical':
+                processed_info['technical_info'].append({
+                    'content': content,
+                    'domain': metadata.get('topic_domain')
+                })
                 
         return processed_info
