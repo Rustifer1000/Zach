@@ -28,29 +28,41 @@ class ModelConfig:
 
 MODEL_CONFIGS = {
     "gpt-4o": ModelConfig("gpt-4o", 12, 0.03, 3072, 2000, 1.0),
-    "gpt-40": ModelConfig("gpt-4o", 30, 0.0015, 16385, 500, 0.85),
+    "gpt-4o": ModelConfig("gpt-4o", 30, 0.0015, 16385, 500, 0.85),
     "text-embedding-3-large": ModelConfig("text-embedding-3-large", 100, 0.0004, 3072, 100, 0.90)
 }
 
-INITIAL_GREETING = """Hello! I'm the Collins Family Mediation Intermediary. I'm here to help you get a head start on your mediation sessions with the Collinses. To get started, could you please tell me your first name?"""
+INITIAL_GREETING = """Hello! I'm the Collins Family Mediation Intermediary. I'm here to gather information and clarify issues to help you get a head start on your mediation sessions with the Collinses. To get started, could you please tell me your first name?"""
 
 SYSTEM_MESSAGE = """
-You are an AI assistant for Collins Family Mediation, helping user.
+You are an AI intermediary for Collins Family Mediation, gathering information for the mediators and providing information to the user in preparation for in-person sessions with the Collinses
 Your goals are:
-- Collect first names of both parties.
-- Discuss main concerns and goals.
-- Explore issues in depth to fully understand what motivates this user.
-- Explore this user's values, priorities, and goals.
-- Explore this user's perception of the other spouse's perspective.
-- Offer to explore some of the user's ideas with the other spouse.
-- Offer to reconvene as user gathers relevant information, and assistant gets the perspective of other spouse.
+- Collect first names of each spouse.
+- Inquire about history of marriage, separation and divorce.  
+    - Current living arrangement
+    - legal action, contact with attorneys etc.
+    - Children, number and ages, special needs etc
+- Ask for main concerns and goals.
+- Explore each issue in depth to fully understand this user's concerns and hopes for mediation
+- Regularly check for this user's perception of the other spouse's perspective.
 - Perform rough calculations of potential outcomes.
 - Offer tentative proposals for settlement.
+- Offer to explore with the other spouse one of the ideas or goals discussed .
 - Summarize discussions.
+- At appropriate intervals, offer to pause and reconvene as user gathers relevant information. Or to continue on.
+- Identify other major concerns and goals and explore them (loop through each issue, as above in lines 46 to 51)
+- let the user know that you are updating the Collinses for the user's in-person mediation sessions
+
 - Suggest next steps.
+- Track the conversation to be sure all issues are addressed.
+- Conclude with an acknowlegement of the progress you have made together and sign off
 
 Please be empathetic and professional while gathering necessary information.
+Ask for one piece of information at a time.
+Identify complex financial and legal issues, and areas of high conflict to be discussed with the Collinses.
+Refer to the vector store for phrasing and tone.
 When a user first connects, begin by asking for their first name.
+follow-up by requesting the first name of the user's spouse.
 """
 
 class APIManager:
@@ -76,7 +88,7 @@ class APIManager:
             for match in results["matches"]:
                 metadata = match.get('metadata', {})
                 info_parts = []
-                for field in ['title', 'author', 'category1', 'category2', 'date', 'priority']:
+                for field in ['title', 'category1', 'category2', 'priority']:
                     if field in metadata:
                         info_parts.append(f"{field.title()}: {metadata[field]}")
                 
@@ -114,10 +126,11 @@ def initialize_session_state():
         st.session_state.spouse_name = ""
         st.session_state.current_issue = None
         st.session_state.issues_discussed = []
-        st.session_state.backend_messages = []  # New: separate list for backend context
+        st.session_state.backend_messages = []
+        st.session_state.current_response = INITIAL_GREETING  # New: store current response
 
 def main():
-    st.title("Collins Family Mediation Assistant")
+    st.title("Collins Family Mediation AI Intermediary")
     
     # Initialize session state
     initialize_session_state()
@@ -127,42 +140,46 @@ def main():
     index = pc.Index("mediation4")
     api_manager = APIManager(index)
 
-    # Display conversation history (only visible messages)
-    for message in st.session_state.messages[1:]:  # Skip the system message
-        role = "You" if message['role'] == 'user' else "Assistant"
-        with st.chat_message(role.lower()):
-            st.write(message['content'])
-
-    # Handle user input
-    user_input = st.chat_input("Your response:")
+    # Create a container for the main content
+    main_container = st.container()
+    
+    # Create a container for the chat input with custom height
+    input_container = st.container()
+    
+    # Use the main container for the response
+    with main_container:
+        st.write(st.session_state.current_response)
+        
+        # Add some spacing
+        st.markdown("<br>" * 2, unsafe_allow_html=True)
+    
+    # Use the input container for the chat input
+    with input_container:
+        user_input = st.chat_input("Your response:")
     
     if user_input:
-        # Add user message to conversation
-        with st.chat_message("user"):
-            st.write(user_input)
+        # Add user message to conversation history
         st.session_state.messages.append({"role": "user", "content": user_input})
-
         # Query Pinecone and add to backend context
         relevant_info = api_manager.query_pinecone(user_input)
         if relevant_info:
-            # Add to backend messages instead of visible messages
             st.session_state.backend_messages.append({
                 "role": "system", 
                 "content": f"Consider this relevant information when responding:\n{relevant_info}"
             })
-
-        # Combine visible messages and backend context for API call
+        # Combine messages for API call
         full_context = (
             [st.session_state.messages[0]]  # System message
             + st.session_state.backend_messages  # Backend context
-            + st.session_state.messages[1:]  # Visible conversation
+            + st.session_state.messages[1:]  # Conversation history
         )
-
-        # Generate and display assistant's response
+        # Generate response and update current_response
         response = api_manager.generate_response(full_context)
-        with st.chat_message("assistant"):
-            st.write(response)
+        st.session_state.current_response = response
         st.session_state.messages.append({"role": "assistant", "content": response})
+        
+        # Force a rerun to update the display
+        st.rerun()
 
 if __name__ == "__main__":
     main()
