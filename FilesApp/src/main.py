@@ -1,10 +1,13 @@
 import streamlit as st
 from pinecone import Pinecone
-from services.api_manager import APIManager
-from utils.session_manager import initialize_session_state
+# Use absolute imports instead of relative
+from src.services.api_manager import APIManager
+from src.utils.session_manager import initialize_session_state
 
 def main():
     st.title("Collins Family Mediation AI Intermediary")
+    
+    # Rest of your main.py code remains the same
     
     # Initialize session state
     initialize_session_state()
