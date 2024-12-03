@@ -1,6 +1,7 @@
 import streamlit as st
 from typing import Dict
-from ..constants.messages import SYSTEM_MESSAGE, INITIAL_GREETING
+# Use absolute imports instead of relative
+from src.constants.messages import SYSTEM_MESSAGE, INITIAL_GREETING
 
 def initialize_session_state():
     if 'initialized' not in st.session_state:
