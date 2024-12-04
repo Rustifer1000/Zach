@@ -1,7 +1,7 @@
 import streamlit as st
 from pinecone import Pinecone
-from .services.api_manager import APIManager
-from .utils.session_manager import initialize_session_state
+from services.api_manager import APIManager
+from utils.session_manager import initialize_session_state
 
 def main():
     st.title("Collins Family Mediation AI Intermediary")
