@@ -112,7 +112,7 @@ class APIManager:
         """Generate AI response using the provided context"""
         try:
             response = self.client.chat.completions.create(
-                model="gpt-4-turbo-preview",  # Updated to use the current model
+                model="gpt-4-turbo-preview",
                 messages=messages,
                 temperature=0.7
             )
