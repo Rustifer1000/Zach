@@ -1,6 +1,6 @@
 from openai import OpenAI
 from typing import Dict, List
-import json
+from ..constants.model_config import MODEL_CONFIGS
 
 class APIManager:
     def __init__(self, pinecone_index):
@@ -112,7 +112,7 @@ class APIManager:
         """Generate AI response using the provided context"""
         try:
             response = self.client.chat.completions.create(
-                model="gpt-4o",
+                model="gpt-4-turbo-preview",  # Updated to use the current model
                 messages=messages,
                 temperature=0.7
             )
@@ -121,4 +121,3 @@ class APIManager:
         except Exception as e:
             print(f"Error in generate_response: {str(e)}")
             return "I apologize, but I encountered an error processing your request."
-        return "\n".join(formatted_sections)
