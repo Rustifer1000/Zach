@@ -4,12 +4,11 @@ from openai import OpenAI
 from typing import Dict, List
 from dataclasses import dataclass
 from enum import Enum
-import json
-import pinecone
 import uuid
+import pinecone
 
 # Ensure OpenAI and Pinecone API keys are set via st.secrets or environment variables
-client = OpenAI(api_key=st.secrets["openai"]["api_key"])
+openai.api_key = st.secrets["openai"]["api_key"]
 
 # ---- Constants and Configuration ----
 class ModelTier(Enum):
@@ -109,11 +108,11 @@ class APIManager:
         self.pinecone_index = pinecone_index
 
     def embed_text(self, text: str) -> List[float]:
-        response = client.embeddings.create(
+        response = openai.Embedding.create(
             model="text-embedding-3-large",
             input=text
         )
-        return response.data[0].embedding
+        return response["data"][0]["embedding"]
 
     def query_pinecone(self, user_input: str) -> str:
         try:
@@ -128,23 +127,16 @@ class APIManager:
 
             relevant_info = []
             for match in results["matches"]:
-                metadata = match.get('metadata', {})
+                metadata = match.get("metadata", {})
                 info_parts = []
-                # Include fields from both documents and conversation turns
                 if "title" in metadata:
                     info_parts.append(f"Title: {metadata['title']}")
                 if "category1" in metadata:
                     info_parts.append(f"Category1: {metadata['category1']}")
-                if "category2" in metadata and metadata['category2']:
-                    info_parts.append(f"Category2: {metadata['category2']}")
                 if "priority" in metadata:
                     info_parts.append(f"Priority: {metadata['priority']}")
-                if "user_id" in metadata:
-                    info_parts.append(f"User ID: {metadata['user_id']}")
                 if "snippet" in metadata:
                     info_parts.append(f"Snippet: {metadata['snippet']}")
-                if "role" in metadata:
-                    info_parts.append(f"Role: {metadata['role']}")
                 if "type" in metadata:
                     info_parts.append(f"Type: {metadata['type']}")
 
@@ -158,18 +150,17 @@ class APIManager:
 
     def generate_response(self, messages: List[Dict]) -> str:
         try:
-            response = client.chat.completions.create(
+            response = openai.ChatCompletion.create(
                 model="gpt-4",
                 messages=messages,
                 temperature=0.7
             )
-            return response.choices[0].message.content
+            return response["choices"][0]["message"]["content"]
         except Exception as e:
             print(f"Error in generate_response: {str(e)}")
-            return "I apologize, but I encountered an error processing your request."
+            return "I encountered an error processing your request."
 
     def store_conversation_turn(self, user_id: str, conversation_id: str, role: str, content: str):
-        # Embed and store a single conversation turn as a vector
         embeddings = self.embed_text(content)
         doc_id = f"conversation_{conversation_id}_{role}_{uuid.uuid4().hex[:6]}"
         metadata = {
@@ -183,37 +174,34 @@ class APIManager:
 
 
 def initialize_session_state():
-    if 'initialized' not in st.session_state:
+    if "initialized" not in st.session_state:
         st.session_state.initialized = True
-
-        # Prompt user for user_id
-        if "user_id" not in st.session_state:
-            st.session_state.user_id = st.text_input("Please enter your user ID:", key="init_user_id")
-            st.stop()
-
-        if st.session_state.user_id:
-            # Generate a unique conversation_id for this session
-            if "conversation_id" not in st.session_state:
-                st.session_state.conversation_id = uuid.uuid4().hex[:8]
-
-            st.session_state.messages = [
-                {"role": "system", "content": SYSTEM_MESSAGE},
-                {"role": "assistant", "content": INITIAL_GREETING}
-            ]
-            st.session_state.current_response = INITIAL_GREETING
-            st.session_state.backend_messages = []
+        st.session_state.user_id = None
+        st.session_state.conversation_id = None
+        st.session_state.messages = []
+        st.session_state.current_response = INITIAL_GREETING
+        st.session_state.backend_messages = []
 
 
 def main():
     st.title("Collins Family Mediation AI Intermediary")
 
-    # Initialize session state and wait for user_id
+    # Initialize session state
     initialize_session_state()
-    if not st.session_state.get("user_id"):
-        return
 
-    user_id = st.session_state.user_id
-    conversation_id = st.session_state.conversation_id
+    # Prompt for user ID if not set
+    if not st.session_state.user_id:
+        st.session_state.user_id = st.text_input("Please enter your User ID:")
+        if not st.session_state.user_id:
+            st.stop()
+
+    # Initialize conversation_id once user_id is set
+    if not st.session_state.conversation_id:
+        st.session_state.conversation_id = uuid.uuid4().hex[:8]
+        st.session_state.messages = [
+            {"role": "system", "content": SYSTEM_MESSAGE},
+            {"role": "assistant", "content": INITIAL_GREETING}
+        ]
 
     # Initialize Pinecone
     pinecone.init(
@@ -226,40 +214,32 @@ def main():
     # Display the AI response
     st.write(st.session_state.current_response)
 
+    # Handle user input
     user_input = st.chat_input("Your response:")
-
     if user_input:
-        # Store user message in conversation memory
-        api_manager.store_conversation_turn(user_id, conversation_id, "user", user_input)
+        # Store user message
+        api_manager.store_conversation_turn(st.session_state.user_id, st.session_state.conversation_id, "user", user_input)
 
-        # Add user message to conversation history
+        # Update conversation history
         st.session_state.messages.append({"role": "user", "content": user_input})
 
-        # Query Pinecone for relevant info (including past conversation turns and documents)
+        # Query Pinecone for relevant info
         relevant_info = api_manager.query_pinecone(user_input)
         if relevant_info:
-            st.session_state.backend_messages.append({
-                "role": "system",
-                "content": f"Relevant context:\n{relevant_info}"
-            })
+            st.session_state.backend_messages.append({"role": "system", "content": f"Relevant context:\n{relevant_info}"})
 
-        # Combine messages for API call
-        full_context = (
-            [st.session_state.messages[0]]  # system message
-            + st.session_state.backend_messages
-            + st.session_state.messages[1:]
-        )
-
-        # Generate response
+        # Generate AI response
+        full_context = st.session_state.messages[:1] + st.session_state.backend_messages + st.session_state.messages[1:]
         response = api_manager.generate_response(full_context)
         st.session_state.current_response = response
         st.session_state.messages.append({"role": "assistant", "content": response})
 
-        # Store assistant message in conversation memory
-        api_manager.store_conversation_turn(user_id, conversation_id, "assistant", response)
+        # Store assistant message
+        api_manager.store_conversation_turn(st.session_state.user_id, st.session_state.conversation_id, "assistant", response)
 
-        # Refresh display
+        # Refresh UI
         st.experimental_rerun()
+
 
 if __name__ == "__main__":
     main()
