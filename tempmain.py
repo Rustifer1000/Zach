@@ -1,6 +1,6 @@
 import os
 import streamlit as st
-import openai
+from openai import OpenAI
 from typing import Dict, List
 from dataclasses import dataclass
 from enum import Enum
@@ -9,7 +9,7 @@ import pinecone
 import uuid
 
 # Ensure OpenAI and Pinecone API keys are set via st.secrets or environment variables
-openai.api_key = st.secrets["openai"]["api_key"]
+client = OpenAI(api_key=st.secrets["openai"]["api_key"])
 
 # ---- Constants and Configuration ----
 class ModelTier(Enum):
@@ -27,8 +27,8 @@ class ModelConfig:
     quality_score: float
 
 MODEL_CONFIGS = {
-    "gpt-4o": ModelConfig("gpt-4o", 12, 0.03, 3072, 2000, 1.0),
-    "gpt-4o": ModelConfig("gpt-4o", 30, 0.0015, 16385, 500, 0.85),
+    "gpt-4": ModelConfig("gpt-4", 12, 0.03, 8192, 2000, 1.0),
+    "gpt-3.5-turbo": ModelConfig("gpt-3.5-turbo", 30, 0.0015, 16385, 500, 0.85),
     "text-embedding-3-large": ModelConfig("text-embedding-3-large", 100, 0.0004, 3072, 100, 0.90)
 }
 
@@ -43,11 +43,11 @@ class APIManager:
         self.pinecone_index = pinecone_index
 
     def embed_text(self, text: str) -> List[float]:
-        response = openai.Embedding.create(
+        response = client.embeddings.create(
             model="text-embedding-3-large",
             input=text
         )
-        return response["data"][0]["embedding"]
+        return response.data[0].embedding
 
     def query_pinecone(self, user_input: str) -> str:
         try:
@@ -92,7 +92,7 @@ class APIManager:
 
     def generate_response(self, messages: List[Dict]) -> str:
         try:
-            response = openai.ChatCompletion.create(
+            response = client.chat.completions.create(
                 model="gpt-4",
                 messages=messages,
                 temperature=0.7
