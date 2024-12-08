@@ -105,8 +105,9 @@ End with a supportive, empathetic note, highlighting that these insights will he
 """
 
 class APIManager:
-    def __init__(self, pinecone_index):
+    def __init__(self, pinecone_index, model_name: str):
         self.pinecone_index = pinecone_index
+        self.model_config = MODEL_CONFIGS[model_name]  # Select model dynamically
 
     def embed_text(self, text: str) -> List[float]:
         response = client.embeddings.create(
@@ -159,9 +160,9 @@ class APIManager:
     def generate_response(self, messages: List[Dict]) -> str:
         try:
             response = client.chat.completions.create(
-                model="gpt-4",
+                model=self.model_config.name,  # Use dynamic model selection
                 messages=messages,
-                temperature=0.7
+                temperature=self.model_config.quality_score  # Use quality_score as a proxy for temperature
             )
             return response.choices[0].message.content
         except Exception as e:
@@ -221,7 +222,10 @@ def main():
         environment=st.secrets["pinecone"]["environment"]
     )
     index = pinecone.Index("mediation4")
-    api_manager = APIManager(index)
+
+    # Select the model dynamically
+    selected_model_name = "gpt-4o"  # Change to "gpt-4o-mini" if needed
+    api_manager = APIManager(index, model_name=selected_model_name)
 
     # Display the AI response
     st.write(st.session_state.current_response)
